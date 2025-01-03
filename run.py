@@ -66,7 +66,8 @@ async def start_bot(api_id, api_hash):
 
     @bot_app.on_message(filters.private & filters.incoming)
     async def react_to_message(client: Client, message: Message):
-        if message.from_user.id in TARGET_USERS or message.from_user.username in TARGET_USERS:
+        username = message.from_user.username
+        if message.from_user.id in TARGET_USERS or username in TARGET_USERS or f'@{username}' in TARGET_USERS:
             emoji = choice(EMOJI_LIST)
             try:
                 await bot_app.send_reaction(chat_id=message.chat.id, message_id=message.id, emoji=emoji)
@@ -100,17 +101,30 @@ def toggle_bot():
 # Handle input and start the bot
 async def process_input():
     global TARGET_USERS, EMOJI_LIST, api_id, api_hash
-    # Get values from the input fields or console
-    user_input = user_ids_input.get().strip().split() if gui_mode else input("Enter user IDs or usernames (separate by space): ").strip().split()
-    emoji_input = emoji_list_input.get().strip().split() if gui_mode else input("Enter emojis (separate by space): ").strip().split()
+    
+    user_input = []
+    emoji_input = []
+    api_id_input = ""
+    api_hash_input = ""
+    
+    if not TARGET_USERS or not EMOJI_LIST or not api_id or not api_hash:
 
-    # Check for API keys
-    api_id = api_id_input.get().strip() if gui_mode else input("Enter API ID: ").strip()
-    api_hash = api_hash_input.get().strip() if gui_mode else input("Enter API Hash: ").strip()
+        # Get values from the input fields or console
+        user_input = user_ids_input.get().strip().split() if gui_mode else input("Enter user IDs or usernames (separate by space): ").strip().split()
+        emoji_input = emoji_list_input.get().strip().split() if gui_mode else input("Enter emojis (separate by space): ").strip().split()
 
-    if not api_id or not api_hash:
-        log_message("API ID and API Hash are required!", "error")
-        return
+        # Check for API keys
+        api_id_input = api_id_input.get().strip() if gui_mode else input("Enter API ID: ").strip()
+        api_hash_input = api_hash_input.get().strip() if gui_mode else input("Enter API Hash: ").strip()
+
+        if not api_id_input or not api_hash_input:
+            log_message("API ID and API Hash are required!", "error")
+            return
+    else:
+        user_input = TARGET_USERS
+        emoji_input = EMOJI_LIST
+        api_id_input = api_id
+        api_hash_input = api_hash
 
     # Split `user_id` and `username`
     TARGET_USERS = []
@@ -217,11 +231,22 @@ def setup_cli():
     global gui_mode
     gui_mode = False  # Mark that we are in CLI mode
     load_settings()  # Try loading settings
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     if not TARGET_USERS or not EMOJI_LIST or not api_id or not api_hash:
         log_message("Starting without GUI. You must input necessary details.")
         loop.run_until_complete(process_input())  # Process input via console
-    else:
+    
+    try:
         loop.run_until_complete(start_bot(api_id, api_hash))
+        # Start the asyncio event loop
+        loop.run_forever()
+    except KeyboardInterrupt:
+        # Stop the asyncio event loop on keyboard interrupt
+        log_message("Stopping bot...", "info")
+        loop.run_until_complete(stop_bot())
+        loop.close()
 
 # Entry point of the program
 if __name__ == "__main__":
